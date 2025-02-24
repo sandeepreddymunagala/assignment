@@ -1,4 +1,4 @@
-# ScaniaAssignment
+# Assignment
 ### Task:-
 - Uses Node.js with Puppeteer and Chromium to scrape a user-specified URL.
 - Uses Python (with a lightweight web framework like Flask) to host the scraped
@@ -35,119 +35,153 @@ npm init -y
 npm install puppeteer-core
 ```
 <p>Step3 : Create a file named scrape.js</p>
+
 ```Javascript
-const { test, expect } = require('@playwright/test');
+const fs = require('fs');
+const puppeteer = require('puppeteer');
 
-test('My first test', async ({ page }) => {
-  await page.goto('https://www.skyscanner.se/');
-  await page.pause();
+(async () => {
+  const urls = process.env.SCRAPE_URLS ? process.env.SCRAPE_URLS.split(',') : [];
 
-  console.log('Hello World Welcome to skyscanner');
-  await page.getByText('Ok', { exact: true }).click();
-  await page
-    .getByRole('combobox', { name: 'Ange den stad du flyger ifrån' })
-    .click();
-  await page
-    .getByRole('combobox', { name: 'Ange den stad du flyger ifrån' })
-    .fill('stoc');
-  await page.getByText('Stockholm Arlanda (ARN)').click();
-  await page
-    .getByRole('combobox', { name: '. Ange din destination eller' })
-    .click();
-  await page.getByRole('button', { name: 'Utforska överallt' }).click();
-  await page.getByLabel('fredag 22 december 2023. Välj').click();
-  await page.getByLabel('lördag 6 januari 2024. Välj').click();
-  await page.getByTestId('traveller-button').click();
-  await page.getByLabel('VuxnaÖver 16 år').click();
-  await page
-    .getByTestId('desktop-travellerselector')
-    .getByRole('button', { name: 'Sök' })
-    .click();
-  await page
-    .getByRole('link', { name: 'Direktflyg till Sverige från' })
-    .click();
-
-  const page1Promise = page.waitForEvent('popup');
-
-  await page
-    .locator('.BpkBackgroundImage_bpk-background-image__img__NDhjM')
-    .first()
-    .click();
-
-  const page1 = await page1Promise;
-
-  const price1 = await page1
-    .getByRole('button', {
-      name: 'Flygalternativ 2: Total',
-    })
-    .textContent();
-  const myArray = price1.split(' ');
-  const price1_extract = myArray[4] + ' ' + myArray[5].substring(0, 3);
-  console.log(`Price of Flight in first link : ${price1_extract}`);
-
-  await page1
-    .getByRole('button', { name: 'Flygalternativ 2: Total' })
-    .getByRole('button')
-    .click();
-
-  const first_price = await page1
-    .getByTestId('pricing-item-container')
-    .getByText('SEK');
-  const f_price = await first_price.textContent();
-  console.log(`Price of Flight after clicking the first link: ${f_price}`);
-
-  if (price1_extract === f_price) {
-    console.log('Testcase Passed: Prices are same');
-  } else {
-    console.log('Testcase Failed: Prices are different, berfore and after');
+  if (urls.length === 0) {
+    console.error('Error: SCRAPE_URLS environment variable is not set or empty.');
+    process.exit(1);
   }
-});
+
+  // Launch Puppeteer with proper flags for headless operation
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--disable-gpu'
+    ],
+    executablePath: process.env.CHROMIUM_PATH || undefined
+  });
+
+  const results = [];
+
+  try {
+    const page = await browser.newPage();
+
+    for (const url of urls) {
+      console.log(`Scraping: ${url}`);
+      await page.goto(url.trim(), { waitUntil: 'networkidle2' });
+
+      const data = await page.evaluate(() => {
+        const title = document.title;
+        const headingElement = document.querySelector('h1');
+        const heading = headingElement ? headingElement.innerText : '';
+        return { title, heading };
+      });
+
+      results.push({ url, ...data });
+    }
+
+    // Write the scraped data to a JSON file
+    fs.writeFileSync('scraped_data.json', JSON.stringify(results, null, 2));
+    console.log('Scraping complete. Data saved to scraped_data.json');
+  } catch (error) {
+    console.error('Error during scraping:', error);
+  } finally {
+    await browser.close();
+  }
+})();
 ```
 
 <p>Step 4: Create a file name server.py</p>
 
-```Shell
-npx playwright test ./tests/test1.spec.js --project firefox --headed
+```python
+from flask import Flask, jsonify
+import json
+import os
+
+app = Flask(__name__)
+
+DATA_FILE = os.environ.get('SCRAPED_DATA_FILE', 'scraped_data.json')
+
+def load_data():
+    try:
+        with open(DATA_FILE, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        return {"error": f"Unable to load data: {str(e)}"}
+
+@app.route('/')
+def index():
+    data = load_data()
+    return jsonify(data)
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+
 ```
-<p><b>Here is a recored video of execution of the test case</b></p>
+<p>Step 5: Create a file named Dockerfile</p>
 
-https://github.com/Saipreetham7/ScaniaAssignment/assets/70648426/999c3662-56ac-452b-ba61-504bc7c4da71
+``` Shell
+# Stage 1: Node.js Scraper Stage
+FROM node:18-alpine AS scraper
+WORKDIR /app
 
+# Install Chromium and dependencies
+RUN apk add --no-cache \
+    chromium 
 
-<h1>Results</h1>
-<p>The test case we executed, will test for the intial flight amount before clicking the link with the flight amount after clicking the link.</p>
-<p>Here is the logic for comparison:</p>
+# Configure Puppeteer
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV CHROMIUM_PATH=/usr/bin/chromium
 
-```JavaScript
-if (price1_extract === f_price) {
-    console.log('Testcase Passed: Prices are same');
-  } else {
-    console.log('Testcase Failed: Prices are different, before and after');
-}
+# Install Node.js dependencies
+COPY package.json package-lock.json ./
+RUN npm ci && npm cache clean --force
+
+# Copy scraping script
+COPY scrape.js .
+
+# Handle build arguments for URLs
+ARG SCRAPE_URLS
+ENV SCRAPE_URLS=${SCRAPE_URLS}
+
+# Conditional scraping execution
+RUN if [ -n "$SCRAPE_URLS" ]; then \
+      node scrape.js; \
+    else \
+      echo "No SCRAPE_URLS provided, skipping scrape"; \
+    fi
+
+# Stage 2: Python Hosting Stage
+FROM python:3.10-alpine AS runtime
+WORKDIR /app
+
+# Copy scraped data from previous stage
+COPY --from=scraper /app/scraped_data.json ./
+
+# Copy Flask application
+COPY server.py .
+
+# Install Python dependencies without caching
+RUN pip install --no-cache-dir flask
+
+# Expose and run the application
+EXPOSE 5000
+CMD ["python", "server.py"]
+```
+<p>Step 6: In terminal type</p>
+
+``` Shell
+docker build --build-arg SCRAPE_URLS="https://www.google.com,https://www.bing.com" -t web-scraperer .
 ```
 
-<p>Here, 
-  <li>if both the prices are same then we print "Testcase Passed"</li>
-  <li>If they are different, we print "Testcase Failed"</li>
-</p>
-
-<p><b>Here are few screenshots of the results</b></p>
-<img width="1136" alt="Screenshot 2023-12-20 at 11 53 23 AM" src="https://github.com/Saipreetham7/ScaniaAssignment/assets/70648426/e83431f6-68a1-4c0f-900e-683c070e8617">
-
-<img width="709" alt="Screenshot 2023-12-20 at 11 53 46 AM" src="https://github.com/Saipreetham7/ScaniaAssignment/assets/70648426/24ed0026-4374-4bf0-a712-60ea9452c9e7">
-
-<h3>Testcase Report</h3>
-<img width="1350" alt="Screenshot 2023-12-20 at 11 55 04 AM" src="https://github.com/Saipreetham7/ScaniaAssignment/assets/70648426/b81bd34c-f301-425b-a954-6daf30de7425">
+``` Shell
+docker run -p 5000:5000 web-scraperer
+```
 
 
-<h1>Challenges faced during Assignment</h1>
-<p>Initially, I began automating tasks using the Selenium tool. However, as the test script ran in Selenium, the browser opened a Captcha. I attempted to eradicate it, but it kept popping up. Then I tried some methods to get around the Captcha, but they didn't work.
-</p>
-<img width="500" alt="Screenshot 2023-12-18 at 6 25 48 PM" src="https://github.com/Saipreetham7/ScaniaAssignment/assets/70648426/84821cd8-fdcf-466b-b969-9c00b20c0311">
-<br><br>
+<p>Step 7: Now open a browser and type the url</p>
 
-<p>So I used Playwright tool and only used Firefox browser for testing because I discovered that other web browsers generate Captcha while running test scripts. Using which I successfully executed the testcase in Firefox browser and received Test reports, of which I attached a screenshot in the preceding section.</p>
-
-<img width="1399" alt="Screenshot 2023-12-20 at 2 28 00 PM" src="https://github.com/Saipreetham7/ScaniaAssignment/assets/70648426/31db9609-549f-4afa-9f7f-0beb9eef22fe">
-
-
+``` url
+http://localhost:5000/
+```
+if you are unable to see the output and page is still loading, open incognito mode and type the url or clear the cache of the browser
