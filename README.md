@@ -32,7 +32,7 @@ cd assignment
 
 ```Shell
 npm init -y 
-npm install puppeteer-core
+npm install puppeteer
 ```
 <p>Step3 : Create a file named scrape.js</p>
 
