@@ -174,6 +174,8 @@ CMD ["python", "server.py"]
 docker build --build-arg SCRAPE_URLS="https://www.google.com,https://www.bing.com" -t web-scraperer .
 ```
 
+you can give any urls in the command
+
 ``` Shell
 docker run -p 5000:5000 web-scraperer
 ```
